@@ -3,25 +3,39 @@ import numpy as np
 from optix.simplex.tableau import to_tableau
 
 
-def pivot(input_tbl, debug=False):
+def pivot(tbl, basis, debug=False):
     def log(v):
         if debug:
             print(v)
 
-    tbl = input_tbl.copy()
-    col_pivot = tbl[-1, :-1].argmin()
-    log(tbl[-1, :-1])
-    if tbl[-1, :-1][col_pivot] >= 0:
+    # Pick var to make basic
+    # In Danzig's - most non negative
+    # In Bland's smallest index w/ negative reduced cost
+    negative_cols = np.where(tbl[-1, :-1] < 0)[0]
+    if len(negative_cols) == 0:
         log("No more pivots possible")
         return tbl, True
-    log(f"Pivoting on index {col_pivot} ({tbl[-1, :-1][col_pivot]}) as its the lowest value")
+    col_pivot = negative_cols[0]
+    log(f"Pivoting on index {col_pivot} ({tbl[-1, :-1][col_pivot]}) as its the lowest index negative reduced cost")
 
-    pivot_candidates = tbl[:-1, -1, None] / tbl[:-1, col_pivot, None]
+    with np.errstate(divide="ignore", invalid="ignore"):
+        pivot_candidates = (
+                tbl[:-1, -1] /
+                tbl[:-1, col_pivot]
+        )
     log(pivot_candidates)
-    masked_pivots = np.where(pivot_candidates > 0, pivot_candidates, np.inf)
-    row_pivot = masked_pivots.argmin()
+    valid = tbl[:-1, col_pivot] > 0
+    masked_pivots = np.where(valid, pivot_candidates, np.inf)
     if np.all(np.isinf(masked_pivots)):
         raise Exception("Problem is unbounded")
+
+    # Pick var to make non basic
+    # of everything that is lowest ratio, pick the row where current
+    # basic var has the lowest index
+    min_ratio = masked_pivots.min()
+    tied_rows = np.where(masked_pivots <= min_ratio + 1e-9)[0]
+    row_pivot = min(tied_rows, key=lambda row: basis[row])
+    
     log(f"row pivot on {row_pivot}")
 
     log(f"Pivots: Row: {row_pivot}, Col: {col_pivot}")
@@ -42,11 +56,17 @@ def pivot(input_tbl, debug=False):
     return tbl, False
 
 
-def solve(objective, constraints):
+def solve(objective, constraints, debug=False):
     tbl, variables = to_tableau(objective, constraints)
+    n_vars, n_constraints = tbl.shape[1] - 1, tbl.shape[0] - 1
+
+    # Basis - list containing entry for which var is currently basic
+    # Seeded with index of slack var per row, as that is our initial basic vars per row
+    basis = list(range(n_vars - n_constraints, n_vars))
+    
     final_tableau = None
     while True:
-        tbl, finished = pivot(tbl)
+        tbl, finished = pivot(tbl, basis, debug)
         if finished:
             final_tableau = tbl
             break

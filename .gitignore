@@ -11,3 +11,6 @@ wheels/
 
 # Jupyter
 .ipynb_checkpoints/
+
+# Cached market data (regenerable; sp500_universe.csv is the exception, kept small and tracked)
+data/*.parquet

@@ -63,6 +63,9 @@ class Expression:
 
         return Expression(terms)
 
+    def __radd__(self, other):
+        return self + other
+
     def __sub__(self, other):
         other = self.from_value(other)
         terms = self.terms.copy()
@@ -144,6 +147,12 @@ class Var:
 
     def __rsub__(self, other):
         return -1 * self + other
+
+    def __le__(self, other):
+        return Expression({self: 1}) <= other
+
+    def __ge__(self, other):
+        return Expression({self: 1}) >= other
 
     def __repr__(self):
         return self.symbol
